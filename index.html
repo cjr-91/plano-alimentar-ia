@@ -116,6 +116,13 @@
     </div>
 
     <script type="module">
+        // =================================================================================
+        // --- CONFIGURAÇÃO IMPORTANTE ---
+        // COLE SUA CHAVE DE API DO GOOGLE AQUI DENTRO DAS ASPAS
+        const GEMINI_API_KEY = "AIzaSyDGN5ON91dj0fqCFRyJGYCC2MTlyWpRyFI";
+        // =================================================================================
+
+
         // --- DATA (Starts empty, will be populated by AI) ---
         let mealPlanData = {
             cardapio: [],
@@ -336,6 +343,11 @@
             const feedbackDiv = document.getElementById('gerador-feedback');
             const button = document.getElementById('generate-plan-button');
 
+            if (GEMINI_API_KEY === "SUA_CHAVE_API_VAI_AQUI") {
+                 feedbackDiv.innerHTML = `<p class="text-red-500 text-sm">Por favor, insira sua chave de API do Google no código do arquivo index.html.</p>`;
+                 return;
+            }
+
             if (inventory.trim() === '') {
                 feedbackDiv.innerHTML = `<p class="text-red-500 text-sm">Por favor, insira os ingredientes do seu estoque.</p>`;
                 return;
@@ -380,7 +392,7 @@
                 showTab('cardapio');
             } catch (error) {
                 console.error("Plan Generation Error:", error);
-                feedbackDiv.innerHTML = `<p class="text-red-500 text-sm">Ocorreu um erro ao gerar o plano. Tente novamente.</p>`;
+                feedbackDiv.innerHTML = `<p class="text-red-500 text-sm">${error.message}</p>`;
             } finally {
                 button.disabled = false;
                 button.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -402,8 +414,7 @@ ${inventory}`;
                     responseMimeType: "application/json",
                 }
             };
-            const apiKey = ""; // Provided by the environment
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
             const response = await fetch(apiUrl, {
                 method: 'POST',
@@ -411,7 +422,7 @@ ${inventory}`;
                 body: JSON.stringify(payload)
             });
 
-            if (!response.ok) throw new Error(`API call failed with status: ${response.status}`);
+            if (!response.ok) throw new Error(`A chamada para a API falhou com o status: ${response.status}. Verifique sua chave de API.`);
             
             const result = await response.json();
 
@@ -426,18 +437,21 @@ ${inventory}`;
                         return JSON.parse(jsonString);
                     } catch (e) {
                         console.error("Error parsing extracted JSON:", e, "String:", jsonString);
-                        throw new Error("Failed to parse the JSON response from the AI after cleaning.");
+                        throw new Error("Falha ao processar a resposta da IA após a limpeza.");
                     }
                 } else {
-                    console.error("Could not find a valid JSON object in the AI response:", textResponse);
-                    throw new Error("Invalid response format from the AI.");
+                    console.error("Não foi possível encontrar um objeto JSON válido na resposta da IA:", textResponse);
+                    throw new Error("Formato de resposta inválido da IA.");
                 }
             } else {
-                console.warn("Unexpected API response structure for plan generation:", result);
+                console.warn("Estrutura de resposta da API inesperada para geração de plano:", result);
                 if (result.promptFeedback?.blockReason) {
-                    throw new Error(`Request blocked: ${result.promptFeedback.blockReason}`);
+                    throw new Error(`Requisição bloqueada: ${result.promptFeedback.blockReason}`);
                 }
-                throw new Error("No content received from API for plan generation.");
+                if(result.error) {
+                    throw new Error(`Erro da API: ${result.error.message}`);
+                }
+                throw new Error("Nenhum conteúdo recebido da API para geração de plano.");
             }
         }
         
@@ -480,15 +494,17 @@ ${inventory}`;
                 modalContent.innerHTML = resultText.replace(/\n/g, '<br>');
             } catch (error) {
                 console.error("Gemini API Error:", error);
-                modalContent.textContent = "Desculpe, não consegui pensar em uma sugestão agora. Tente novamente mais tarde.";
+                modalContent.textContent = error.message;
             }
         }
 
         async function callGeminiForText(prompt) {
+            if (GEMINI_API_KEY === "SUA_CHAVE_API_VAI_AQUI") {
+                 throw new Error("Por favor, insira sua chave de API do Google no código do arquivo index.html.");
+            }
             let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
             const payload = { contents: chatHistory };
-            const apiKey = "";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
             const response = await fetch(apiUrl, {
                 method: 'POST',
@@ -496,14 +512,17 @@ ${inventory}`;
                 body: JSON.stringify(payload)
             });
 
-            if (!response.ok) throw new Error(`API call failed with status: ${response.status}`);
+            if (!response.ok) throw new Error(`A chamada para a API falhou com o status: ${response.status}. Verifique sua chave de API.`);
             const result = await response.json();
             if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
                 return result.candidates[0].content.parts[0].text;
             } else {
                 console.warn("Unexpected API response structure:", result);
                 if (result.promptFeedback?.blockReason) { return `Não foi possível gerar uma resposta devido a: ${result.promptFeedback.blockReason}.`; }
-                throw new Error("No content received from API.");
+                if(result.error) {
+                    throw new Error(`Erro da API: ${result.error.message}`);
+                }
+                throw new Error("Nenhum conteúdo recebido da API.");
             }
         }
 
