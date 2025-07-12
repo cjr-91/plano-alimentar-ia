@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plano Alimentar Semanal - NutriVeg IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f9fafb;
+        }
+        .tab-active {
+            border-bottom-color: #10b981;
+            color: #059669;
+            font-weight: 600;
+        }
+        .checkbox-custom {
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 0.375rem;
+            border: 2px solid #d1d5db;
+            transition: background-color 0.2s;
+            flex-shrink: 0;
+        }
+        .checkbox-custom:checked {
+            background-color: #10b981;
+            border-color: #10b981;
+            background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+        }
+        .strikethrough-on-check:checked + label {
+            text-decoration: line-through;
+            color: #6b7280;
+        }
+        .hidden {
+            display: none;
+        }
+        .gemini-button {
+            background-color: #ecfdf5; /* emerald-50 */
+            color: #065f46; /* emerald-800 */
+            border: 1px solid #6ee7b7; /* emerald-300 */
+            transition: all 0.2s;
+        }
+        .gemini-button:hover {
+            background-color: #d1fae5; /* emerald-100 */
+            border-color: #34d399; /* emerald-400 */
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #10b981;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .accordion-button svg {
+            transition: transform 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <!-- Main App Container -->
+    <div id="app-container">
+        <div class="container mx-auto max-w-lg p-4">
+            <header class="text-center mb-6">
+                <h1 class="text-2xl font-bold text-emerald-700">Plano Alimentar Semanal 🍃</h1>
+                <p class="text-sm text-gray-500 mt-1">Organizado pela NutriVeg IA</p>
+            </header>
+
+            <div class="bg-yellow-100 border-l-4 border-yellow-400 text-yellow-800 p-4 rounded-r-lg mb-6 text-xs">
+                <p><strong>Atenção:</strong> Sou uma IA e não substituo um profissional de saúde. Para um plano personalizado e seguro, consulte um nutricionista.</p>
+            </div>
+            
+            <div class="flex border-b border-gray-200 mb-6 text-sm sm:text-base">
+                <button id="tab-gerar" class="flex-1 py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('gerar')">Gerar Plano</button>
+                <button id="tab-cardapio" class="flex-1 py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('cardapio')">Cardápio</button>
+                <button id="tab-lista" class="flex-1 py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('lista')">Compras</button>
+                <button id="tab-receitas" class="flex-1 py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('receitas')">Receitas</button>
+            </div>
+
+            <main>
+                <div id="content-gerar"></div>
+                <div id="content-cardapio" class="hidden"></div>
+                <div id="content-lista" class="hidden"></div>
+                <div id="content-receitas" class="hidden"></div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Gemini API Modal -->
+    <div id="geminiModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm mx-auto w-11/12">
+            <h3 id="geminiModalTitle" class="text-lg font-medium text-gray-900 mb-4">✨ Sugestão da IA</h3>
+            <div id="geminiModalContent" class="text-sm text-gray-600 min-h-[100px] max-h-60 overflow-y-auto">
+                <div class="flex justify-center items-center h-full">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+            <div class="mt-4 text-right">
+                <button id="closeGeminiModalButton" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md text-sm font-semibold hover:bg-gray-300">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- DATA (Starts empty, will be populated by AI) ---
+        let mealPlanData = {
+            cardapio: [],
+            lista: {},
+            receitas: [],
+            estoqueInicial: ''
+        };
+
+        // --- UI RENDERING ---
+        function renderAll() {
+            renderCardapio(mealPlanData.cardapio);
+            renderLista(mealPlanData.lista, mealPlanData.estoqueInicial);
+            renderReceitas(mealPlanData.cardapio, mealPlanData.receitas);
+            renderGerar();
+        }
+
+        function renderPlaceholder(containerId, message) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `<div class="text-center p-8 bg-white rounded-lg shadow-sm"><p class="text-gray-500">${message}</p></div>`;
+        }
+
+        function renderCardapio(data) {
+            if(!data || data.length === 0) {
+                renderPlaceholder('content-cardapio', 'Gere um novo plano na aba "Gerar Plano" para ver seu cardápio.');
+                return;
+            }
+            const container = document.getElementById('content-cardapio');
+            container.innerHTML = data.map(dia => `
+                <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
+                    <h2 class="text-lg font-bold text-emerald-600 mb-3">${dia.dia}</h2>
+                    <div class="space-y-3 text-sm text-gray-700">
+                        <div><strong>Café:</strong> ${dia.cafe}</div>
+                        <div>
+                            <p><strong>Almoço:</strong> ${dia.almoco}</p>
+                            <div class="flex space-x-2 mt-2">
+                                <button class="gemini-button text-xs py-1 px-2 rounded-md" onclick="handleGeminiClick('variacao', 'almoço', '${dia.almoco.replace(/'/g, "\\'")}')">✨ Criar Variação</button>
+                                <button class="gemini-button text-xs py-1 px-2 rounded-md" onclick="handleGeminiClick('dica', 'almoço', '${dia.almoco.replace(/'/g, "\\'")}')">✨ Dica da Nutri</button>
+                            </div>
+                        </div>
+                        <div>
+                            <p><strong>Jantar:</strong> ${dia.jantar}</p>
+                             <div class="flex space-x-2 mt-2">
+                                <button class="gemini-button text-xs py-1 px-2 rounded-md" onclick="handleGeminiClick('variacao', 'jantar', '${dia.jantar.replace(/'/g, "\\'")}')">✨ Criar Variação</button>
+                                <button class="gemini-button text-xs py-1 px-2 rounded-md" onclick="handleGeminiClick('dica', 'jantar', '${dia.jantar.replace(/'/g, "\\'")}')">✨ Dica da Nutri</button>
+                            </div>
+                        </div>
+                        <div><strong>Lanches:</strong> ${dia.lanches}</div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-100 text-center">
+                        <button class="gemini-button text-xs py-1 px-3 rounded-md" onclick="handleLeftoversClick('${dia.almoco.replace(/'/g, "\\'")}', '${dia.jantar.replace(/'/g, "\\'")}')">
+                            ✨ O que fazer com as sobras?
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderLista(listaSugerida, estoqueInicial) {
+            const container = document.getElementById('content-lista');
+            if ((!listaSugerida || Object.keys(listaSugerida).length === 0) && !estoqueInicial) {
+                 renderPlaceholder('content-lista', 'Sua lista de compras e estoque aparecerão aqui após gerar um plano.');
+                return;
+            }
+            
+            const savingsButton = `<div class="mb-6 text-center">
+                <button class="gemini-button w-full sm:w-auto py-2 px-4 rounded-lg" onclick="handleSavingsClick()">
+                    ✨ Dicas de Economia na Feira
+                </button>
+            </div>`;
+
+            const listaSugeridaHTML = Object.entries(listaSugerida).map(([categoria, itens], catIndex) => `
+                <div class="mb-6">
+                    <h3 class="font-semibold text-gray-700 border-b pb-2 mb-3">${categoria}</h3>
+                    <ul class="space-y-3">
+                        ${itens.map((item, itemIndex) => `
+                            <li class="flex items-center">
+                                <input type="checkbox" id="item${catIndex}-${itemIndex}" class="checkbox-custom strikethrough-on-check mr-3">
+                                <label for="item${catIndex}-${itemIndex}" class="text-gray-800">${item}</label>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            `).join('');
+
+            const estoqueInicialHTML = estoqueInicial ? `
+                <div class="mb-6">
+                    <h3 class="font-semibold text-gray-700 border-b pb-2 mb-3">Seu Estoque Inicial</h3>
+                    <ul class="space-y-1 text-sm text-gray-600 list-disc list-inside">
+                        ${estoqueInicial.split('\n').filter(line => line.trim() !== '').map(line => `<li>${line}</li>`).join('')}
+                    </ul>
+                </div>
+            ` : '';
+
+            container.innerHTML = `<div class="bg-white rounded-lg shadow-sm p-4">${savingsButton} ${listaSugeridaHTML} ${estoqueInicialHTML}</div>`;
+        }
+
+        function renderReceitas(cardapio, receitas) {
+             if(!cardapio || cardapio.length === 0) {
+                renderPlaceholder('content-receitas', 'As receitas do seu plano aparecerão aqui.');
+                return;
+            }
+            const container = document.getElementById('content-receitas');
+            container.innerHTML = cardapio.map((dia, index) => {
+                const findRecipe = (mealName) => receitas.find(r => r.titulo.trim().toLowerCase() === mealName.trim().toLowerCase());
+
+                const receitasDoDia = {
+                    'Café': findRecipe(dia.cafe),
+                    'Almoço': findRecipe(dia.almoco),
+                    'Jantar': findRecipe(dia.jantar),
+                    'Lanches': findRecipe(dia.lanches)
+                };
+
+                return `
+                <div class="bg-white rounded-lg shadow-sm mb-2">
+                    <button class="accordion-button w-full flex justify-between items-center text-left p-4" onclick="toggleAccordion(this)">
+                        <h2 class="text-lg font-bold text-emerald-600">${dia.dia}</h2>
+                        <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div class="accordion-content px-4 pb-4">
+                        ${Object.entries(receitasDoDia).map(([nomeRefeicao, receita]) => {
+                            const mealDescription = dia[nomeRefeicao.toLowerCase()];
+                            if (!receita) return `<div class="border-t pt-4 mt-4"><h3 class="font-semibold">${nomeRefeicao}:</h3><p class="text-sm text-gray-700">${mealDescription || 'Preparo simples, não requer receita detalhada.'}</p></div>`;
+                            return `
+                            <div class="border-t pt-4 mt-4">
+                                <h3 class="font-semibold text-gray-800 mb-2">${nomeRefeicao}: ${receita.titulo}</h3>
+                                <div class="text-sm text-gray-700 space-y-3">
+                                    <div>
+                                        <h4 class="font-medium mb-1">Ingredientes:</h4>
+                                        <ul class="list-disc list-inside space-y-1">
+                                            ${receita.ingredientes.map(ing => `<li>${ing}</li>`).join('')}
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-medium mb-1">Modo de Preparo:</h4>
+                                        <ol class="list-decimal list-inside space-y-1">
+                                            ${receita.preparo.map(passo => `<li>${passo}</li>`).join('')}
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                            `
+                        }).join('')}
+                    </div>
+                </div>
+                `
+            }).join('');
+        }
+        
+        window.toggleAccordion = function(element) {
+            const content = element.nextElementSibling;
+            const icon = element.querySelector('svg');
+            if (content.style.maxHeight) {
+                content.style.maxHeight = null;
+                icon.style.transform = 'rotate(0deg)';
+            } else {
+                content.style.maxHeight = content.scrollHeight + "px";
+                icon.style.transform = 'rotate(180deg)';
+            }
+        }
+
+        function renderGerar() {
+            const container = document.getElementById('content-gerar');
+            container.innerHTML = `
+                <div class="bg-white rounded-lg shadow-sm p-6">
+                    <h2 class="text-lg font-bold text-emerald-600 mb-3">Gerador de Plano Alimentar com IA</h2>
+                    <p class="text-sm text-gray-600 mb-4">Insira os detalhes abaixo, liste seus ingredientes e a IA criará um plano semanal completo.</p>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label for="people-input" class="block text-sm font-medium text-gray-700">Pessoas</label>
+                            <input type="number" id="people-input" value="2" min="1" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label for="start-date-input" class="block text-sm font-medium text-gray-700">Data de Início</label>
+                            <input type="date" id="start-date-input" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label for="end-date-input" class="block text-sm font-medium text-gray-700">Data de Fim</label>
+                            <input type="date" id="end-date-input" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                         <label for="special-instructions-input" class="block text-sm font-medium text-gray-700">Instruções Especiais (Opcional)</label>
+                         <textarea id="special-instructions-input" class="mt-1 w-full h-20 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400" placeholder="Ex: Focar em pratos com arroz e feijão; Receitas mais elaboradas aos fins de semana..."></textarea>
+                    </div>
+
+                    <div>
+                         <label for="inventory-input" class="block text-sm font-medium text-gray-700">Seu Estoque (um ingrediente por linha)</label>
+                         <textarea id="inventory-input" class="mt-1 w-full h-40 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400" placeholder="Ex:\n5 espigas de milho\n3 mangas\n2 alhos poró\n1kg de feijão carioca..."></textarea>
+                    </div>
+                    
+                    <div id="gerador-feedback" class="mt-4 text-center"></div>
+
+                    <button id="generate-plan-button" class="mt-4 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-colors">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                        Gerar Novo Plano com IA
+                    </button>
+                </div>
+            `;
+            const startDateInput = document.getElementById('start-date-input');
+            const endDateInput = document.getElementById('end-date-input');
+            const today = new Date();
+            const sevenDaysFromNow = new Date();
+            sevenDaysFromNow.setDate(today.getDate() + 6);
+            startDateInput.value = today.toISOString().split('T')[0];
+            endDateInput.value = sevenDaysFromNow.toISOString().split('T')[0];
+            document.getElementById('generate-plan-button').addEventListener('click', handleGeneratePlanClick);
+        }
+
+        // --- GEMINI API LOGIC ---
+        async function handleGeneratePlanClick() {
+            const inventory = document.getElementById('inventory-input').value;
+            const specialInstructions = document.getElementById('special-instructions-input').value;
+            const people = document.getElementById('people-input').value;
+            const startDate = document.getElementById('start-date-input').value;
+            const endDate = document.getElementById('end-date-input').value;
+            const feedbackDiv = document.getElementById('gerador-feedback');
+            const button = document.getElementById('generate-plan-button');
+
+            if (inventory.trim() === '') {
+                feedbackDiv.innerHTML = `<p class="text-red-500 text-sm">Por favor, insira os ingredientes do seu estoque.</p>`;
+                return;
+            }
+             if (!people || !startDate || !endDate) {
+                feedbackDiv.innerHTML = `<p class="text-red-500 text-sm">Por favor, preencha a quantidade de pessoas e as datas.</p>`;
+                return;
+            }
+
+            feedbackDiv.innerHTML = `<div class="flex justify-center items-center"><div class="spinner !w-6 !h-6"></div><p class="ml-3 text-gray-600">Gerando seu plano... Isso pode levar um momento.</p></div>`;
+            button.disabled = true;
+            button.classList.add('opacity-50', 'cursor-not-allowed');
+
+            try {
+                const newPlan = await callGeminiForPlan(inventory, people, startDate, endDate, specialInstructions);
+                
+                mealPlanData.estoqueInicial = inventory;
+                
+                const startDateObj = new Date(startDate + 'T00:00:00');
+                const diasDaSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+
+                if (newPlan.cardapio && newPlan.cardapio.length > 0) {
+                    for (let i = 0; i < newPlan.cardapio.length; i++) {
+                        const currentDate = new Date(startDateObj);
+                        currentDate.setDate(startDateObj.getDate() + i);
+                        
+                        const day = currentDate.getDate().toString().padStart(2, '0');
+                        const month = (currentDate.getMonth() + 1).toString().padStart(2, '0');
+                        const year = currentDate.getFullYear().toString().slice(-2);
+                        const diaSemana = diasDaSemana[currentDate.getDay()];
+                        
+                        newPlan.cardapio[i].dia = `${day}/${month}/${year} - ${diaSemana}`;
+                    }
+                }
+
+                mealPlanData.cardapio = newPlan.cardapio;
+                mealPlanData.lista = newPlan.lista;
+                mealPlanData.receitas = newPlan.receitas;
+                
+                renderAll();
+                feedbackDiv.innerHTML = `<p class="text-green-600 text-sm font-semibold">Seu novo plano foi gerado com sucesso!</p>`;
+                showTab('cardapio');
+            } catch (error) {
+                console.error("Plan Generation Error:", error);
+                feedbackDiv.innerHTML = `<p class="text-red-500 text-sm">Ocorreu um erro ao gerar o plano. Tente novamente.</p>`;
+            } finally {
+                button.disabled = false;
+                button.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        async function callGeminiForPlan(inventory, people, startDate, endDate, specialInstructions) {
+            const instructionsText = specialInstructions.trim() !== '' ? `Instruções Especiais a seguir: ${specialInstructions}` : '';
+
+            const prompt = `Você é a NutriVeg IA, uma nutricionista virtual especialista em criar planos alimentares vegetarianos. Baseado na seguinte lista de ingredientes de estoque, crie um plano alimentar completo para 7 dias para ${people} adultos, para o período de ${startDate} a ${endDate}. O plano deve maximizar o uso do estoque. ${instructionsText} A resposta DEVE ser um objeto JSON, sem nenhum texto ou formatação extra. O JSON deve ter a seguinte estrutura: { "cardapio": [{ "dia": "String (apenas o nome do dia da semana, ex: 'Segunda-feira')", "cafe": "String", "almoco": "String", "jantar": "String", "lanches": "String" }], "lista": { "Categoria": ["item1", "item2"] }, "receitas": [{ "titulo": "String", "ingredientes": ["String"], "preparo": ["String"] }] }. Gere uma receita detalhada, mesmo que simples, para CADA refeição do cardápio (café, almoço, jantar e lanches). O título da receita deve corresponder exatamente ao nome da refeição no cardápio para facilitar a busca.
+
+Estoque disponível:
+${inventory}`;
+
+            let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+            const payload = { 
+                contents: chatHistory,
+                generationConfig: {
+                    responseMimeType: "application/json",
+                }
+            };
+            const apiKey = ""; // Provided by the environment
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) throw new Error(`API call failed with status: ${response.status}`);
+            
+            const result = await response.json();
+
+            if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                const textResponse = result.candidates[0].content.parts[0].text;
+                const jsonStart = textResponse.indexOf('{');
+                const jsonEnd = textResponse.lastIndexOf('}');
+
+                if (jsonStart !== -1 && jsonEnd > jsonStart) {
+                    const jsonString = textResponse.substring(jsonStart, jsonEnd + 1);
+                    try {
+                        return JSON.parse(jsonString);
+                    } catch (e) {
+                        console.error("Error parsing extracted JSON:", e, "String:", jsonString);
+                        throw new Error("Failed to parse the JSON response from the AI after cleaning.");
+                    }
+                } else {
+                    console.error("Could not find a valid JSON object in the AI response:", textResponse);
+                    throw new Error("Invalid response format from the AI.");
+                }
+            } else {
+                console.warn("Unexpected API response structure for plan generation:", result);
+                if (result.promptFeedback?.blockReason) {
+                    throw new Error(`Request blocked: ${result.promptFeedback.blockReason}`);
+                }
+                throw new Error("No content received from API for plan generation.");
+            }
+        }
+        
+        window.handleSavingsClick = function() {
+            const shoppingList = Object.values(mealPlanData.lista).flat().join(', ');
+            if (!shoppingList) return;
+            const prompt = `Você é a NutriVeg IA. Baseado nesta lista de compras vegetariana, dê 3 dicas práticas e curtas para economizar dinheiro sem sacrificar a nutrição. Fale sobre produtos da estação, opções congeladas vs. frescas, ou alternativas de proteínas mais baratas. Lista: ${shoppingList}.`;
+            openGeminiModal('✨ Dicas de Economia', prompt);
+        }
+        
+        window.handleLeftoversClick = function(almoco, jantar) {
+            const prompt = `Você é a NutriVeg IA. Tive para o almoço "${almoco}" e para o jantar "${jantar}". Dê uma ideia criativa e simples para combinar as sobras dessas duas refeições em um novo prato para amanhã. Responda em no máximo 4 frases.`;
+            openGeminiModal('✨ Ideias para Sobras', prompt);
+        }
+
+        window.handleGeminiClick = function(type, mealName, mealDesc) {
+            let prompt = '';
+            let title = '';
+            if (type === 'variacao') {
+                title = `✨ Variação para o ${mealName}`;
+                prompt = `Você é a NutriVeg IA. Para a refeição "${mealName}", que é "${mealDesc}", sugira uma única alternativa vegetariana criativa. Responda em no máximo 4 frases.`;
+            } else {
+                title = `✨ Dica para o ${mealName}`;
+                prompt = `Você é a NutriVeg IA. Dê uma dica de chef ou um fato nutricional sobre a refeição "${mealDesc}". Responda em no máximo 4 frases.`;
+            }
+            openGeminiModal(title, prompt);
+        }
+
+        async function openGeminiModal(title, prompt) {
+            const modal = document.getElementById('geminiModal');
+            const modalTitle = document.getElementById('geminiModalTitle');
+            const modalContent = document.getElementById('geminiModalContent');
+            
+            modal.classList.remove('hidden');
+            modalTitle.textContent = title;
+            modalContent.innerHTML = '<div class="flex justify-center items-center h-full"><div class="spinner"></div><p class="ml-4 text-gray-500">✨ Pensando...</p></div>';
+
+            try {
+                const resultText = await callGeminiForText(prompt);
+                modalContent.innerHTML = resultText.replace(/\n/g, '<br>');
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                modalContent.textContent = "Desculpe, não consegui pensar em uma sugestão agora. Tente novamente mais tarde.";
+            }
+        }
+
+        async function callGeminiForText(prompt) {
+            let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+            const payload = { contents: chatHistory };
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) throw new Error(`API call failed with status: ${response.status}`);
+            const result = await response.json();
+            if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                return result.candidates[0].content.parts[0].text;
+            } else {
+                console.warn("Unexpected API response structure:", result);
+                if (result.promptFeedback?.blockReason) { return `Não foi possível gerar uma resposta devido a: ${result.promptFeedback.blockReason}.`; }
+                throw new Error("No content received from API.");
+            }
+        }
+
+        // --- TAB & MODAL LOGIC ---
+        window.showTab = function(tabName) {
+            const contents = ['cardapio', 'lista', 'receitas', 'gerar'];
+            contents.forEach(content => {
+                document.getElementById(`content-${content}`).classList.toggle('hidden', content !== tabName);
+                document.getElementById(`tab-${content}`).classList.toggle('tab-active', content === tabName);
+            });
+        }
+
+        function setupModals() {
+            const geminiModal = document.getElementById('geminiModal');
+            const closeGeminiModalButton = document.getElementById('closeGeminiModalButton');
+            closeGeminiModalButton.addEventListener('click', () => geminiModal.classList.add('hidden'));
+        }
+
+        // --- INITIALIZATION ---
+        function init() {
+            renderAll();
+            setupModals();
+            showTab('gerar'); // Start on the 'Gerar Plano' tab
+        }
+
+        init();
+    </script>
+</body>
+</html>
