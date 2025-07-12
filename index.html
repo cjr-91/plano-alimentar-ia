@@ -75,6 +75,15 @@
         .whatsapp-button:hover {
             background-color: #1DA851;
         }
+        .pagination-button {
+            background-color: #e5e7eb;
+            color: #374151;
+        }
+        .pagination-button.active {
+            background-color: #10b981;
+            color: white;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -92,9 +101,10 @@
                 <button id="tab-cardapio" class="w-1/4 flex-grow py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('cardapio')">📅 Cardápio</button>
                 <button id="tab-lista" class="w-1/4 flex-grow py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('lista')">🛒 Compras</button>
                 <button id="tab-receitas" class="w-1/4 flex-grow py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('receitas')">🍳 Receitas</button>
-                <button id="tab-analise" class="w-1/3 flex-grow py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('analise')">🔬 Análise</button>
-                <button id="tab-receita-rapida" class="w-1/3 flex-grow py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('receita-rapida')">🧑‍🍳 Rápida</button>
-                <button id="tab-cultura-mundial" class="w-1/3 flex-grow py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('cultura-mundial')">🌎 Cultura</button>
+                <button id="tab-nutri" class="w-1/4 flex-grow py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('nutri')">👩‍⚕️ Nutri</button>
+                <button id="tab-receita-rapida" class="w-1/4 flex-grow py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('receita-rapida')">🧑‍🍳 Rápida</button>
+                <button id="tab-cultura-mundial" class="w-1/4 flex-grow py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('cultura-mundial')">🌎 Cultura</button>
+                <button id="tab-modo-festa" class="w-1/4 flex-grow py-3 px-1 text-center text-gray-500 border-b-2 border-transparent transition-colors duration-300" onclick="showTab('modo-festa')">🎉 Festa</button>
             </div>
 
             <main>
@@ -102,9 +112,10 @@
                 <div id="content-cardapio" class="hidden"></div>
                 <div id="content-lista" class="hidden"></div>
                 <div id="content-receitas" class="hidden"></div>
-                <div id="content-analise" class="hidden"></div>
+                <div id="content-nutri" class="hidden"></div>
                 <div id="content-receita-rapida" class="hidden"></div>
                 <div id="content-cultura-mundial" class="hidden"></div>
+                <div id="content-modo-festa" class="hidden"></div>
             </main>
 
             <footer class="mt-8">
@@ -134,17 +145,19 @@
         // =================================================================================
         // --- CONFIGURAÇÃO IMPORTANTE ---
         // COLE SUA CHAVE DE API DO GOOGLE AQUI DENTRO DAS ASPAS
-        const GEMINI_API_KEY = "AIzaSyDGN5ON91dj0fqCFRyJGYCC2MTlyWpRyFI";
+        const GEMINI_API_KEY = "SUA_CHAVE_API_VAI_AQUI";
         // =================================================================================
 
 
-        // --- DATA (Starts empty, will be populated by AI) ---
+        // --- DATA & STATE MANAGEMENT ---
         let mealPlanData = {
             cardapio: [],
             lista: {},
             receitas: [],
             estoqueInicial: ''
         };
+        let cardapioCurrentPage = 1;
+        let generatedWorldRecipes = [];
 
         // --- UI RENDERING ---
         function renderAll() {
@@ -152,9 +165,10 @@
             renderLista(mealPlanData.lista, mealPlanData.estoqueInicial);
             renderReceitas(mealPlanData.cardapio, mealPlanData.receitas);
             renderGerar();
-            renderAnalise();
+            renderNutri();
             renderReceitaRapida();
             renderCulturaMundial();
+            renderModoFesta();
         }
 
         function renderPlaceholder(containerId, message) {
@@ -173,11 +187,17 @@
             <div class="mb-6 text-center">
                  <button class="whatsapp-button w-full sm:w-auto py-2 px-4 rounded-lg flex items-center justify-center" onclick='handleShareWeekToWhatsApp()'>
                     <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.894 11.892-1.99 0-3.903-.52-5.687-1.475L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.886-.001 2.267.655 4.398 1.803 6.12l-1.214 4.433 4.572-1.196z"/></svg>
-                    Partilhar Cardápio da Semana
+                    Enviar via WhatsApp
                 </button>
             </div>`;
             
-            const cardsHTML = data.map(dia => `
+            const itemsPerPage = 7;
+            const totalPages = Math.ceil(data.length / itemsPerPage);
+            const startIndex = (cardapioCurrentPage - 1) * itemsPerPage;
+            const endIndex = cardapioCurrentPage * itemsPerPage;
+            const currentWeekData = data.slice(startIndex, endIndex);
+
+            const cardsHTML = currentWeekData.map(dia => `
                 <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
                     <h2 class="text-lg font-bold text-emerald-600 mb-3">${dia.dia}</h2>
                     <div class="space-y-3 text-sm text-gray-700">
@@ -205,7 +225,22 @@
                     </div>
                 </div>
             `).join('');
-            container.innerHTML = shareButton + cardsHTML;
+
+            let paginationHTML = '';
+            if (totalPages > 1) {
+                paginationHTML += `<div class="flex justify-center items-center space-x-2 mt-6">`;
+                for (let i = 1; i <= totalPages; i++) {
+                    paginationHTML += `<button class="pagination-button py-2 px-4 rounded-md text-sm ${i === cardapioCurrentPage ? 'active' : ''}" onclick="changeCardapioPage(${i})">Semana ${i}</button>`;
+                }
+                paginationHTML += `</div>`;
+            }
+
+            container.innerHTML = shareButton + cardsHTML + paginationHTML;
+        }
+
+        window.changeCardapioPage = function(page) {
+            cardapioCurrentPage = page;
+            renderCardapio(mealPlanData.cardapio);
         }
 
         function renderLista(listaSugerida, estoqueInicial) {
@@ -223,23 +258,28 @@
                 </button>
                 <button class="whatsapp-button w-full py-2 px-4 rounded-lg flex items-center justify-center" onclick="handleShareListToWhatsApp()">
                     <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.894 11.892-1.99 0-3.903-.52-5.687-1.475L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.886-.001 2.267.655 4.398 1.803 6.12l-1.214 4.433 4.572-1.196z"/></svg>
-                    Partilhar Lista
+                    Enviar via WhatsApp
                 </button>
             </div>`;
 
-            const listaSugeridaHTML = Object.keys(listaSugerida).length > 0 ? Object.entries(listaSugerida).map(([categoria, itens], catIndex) => `
+            const listaSugeridaHTML = Object.keys(listaSugerida).length > 0 ? `
                 <div class="mb-6">
                     <h3 class="font-semibold text-gray-700 border-b pb-2 mb-3">🛒 Lista de Compras</h3>
-                    <ul class="space-y-3">
-                        ${itens.map((item, itemIndex) => `
-                            <li class="flex items-center">
-                                <input type="checkbox" id="item${catIndex}-${itemIndex}" class="checkbox-custom strikethrough-on-check mr-3">
-                                <label for="item${catIndex}-${itemIndex}" class="text-gray-800">${item}</label>
-                            </li>
-                        `).join('')}
-                    </ul>
+                    ${Object.entries(listaSugerida).map(([categoria, itens]) => `
+                        <div class="mt-4">
+                            <h4 class="font-medium text-gray-600">${categoria}</h4>
+                            <ul class="space-y-3 mt-2">
+                                ${itens.map((item, itemIndex) => `
+                                    <li class="flex items-center">
+                                        <input type="checkbox" id="item${categoria}-${itemIndex}" class="checkbox-custom strikethrough-on-check mr-3">
+                                        <label for="item${categoria}-${itemIndex}" class="text-gray-800">${item}</label>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    `).join('')}
                 </div>
-            `).join('') : '<p class="text-sm text-center text-gray-500 mb-4">Ótimo! Parece que você já tem tudo no estoque.</p>';
+            ` : '<p class="text-sm text-center text-gray-500 mb-4">Ótimo! Parece que você já tem tudo no estoque.</p>';
 
             const estoqueInicialHTML = estoqueInicial ? `
                 <div class="mb-6">
@@ -305,15 +345,16 @@
             }).join('');
         }
         
-        function renderAnalise() {
-            const container = document.getElementById('content-analise');
+        function renderNutri() {
+            const container = document.getElementById('content-nutri');
             const content = mealPlanData.cardapio.length > 0 ? `
                 <div class="bg-white rounded-lg shadow-sm p-6 text-center">
-                    <p class="text-sm text-gray-600 mb-4">Clique no botão abaixo para receber uma análise nutricional do seu cardápio semanal.</p>
-                    <button class="gemini-button w-full sm:w-auto py-2 px-4 rounded-lg" onclick="handleAnalysisClick()">
-                        🔬 Gerar Análise Nutricional
+                    <h2 class="text-lg font-bold text-emerald-600 mb-3">👩‍⚕️ Análise da Nutri & Plano de Ação</h2>
+                    <p class="text-sm text-gray-600 mb-4">Clique no botão para receber a justificativa nutricional do seu cardápio e um plano de ação para preparar suas marmitas da semana!</p>
+                    <button class="gemini-button w-full sm:w-auto py-2 px-4 rounded-lg" onclick="handleNutriAnalysisClick()">
+                        Gerar Análise e Plano de Ação
                     </button>
-                    <div id="analise-result" class="text-left mt-6 text-sm text-gray-700 space-y-2"></div>
+                    <div id="nutri-result" class="text-left mt-6 text-sm text-gray-700 space-y-4"></div>
                 </div>
             ` : `<div class="text-center p-8 bg-white rounded-lg shadow-sm"><p class="text-gray-500">Gere um plano primeiro para poder analisá-lo.</p></div>`;
             container.innerHTML = content;
@@ -344,6 +385,31 @@
                         ✈️ Descobrir Pratos do Mundo
                     </button>
                     <div id="world-culture-result" class="mt-6"></div>
+                </div>
+            `;
+        }
+        
+        function renderModoFesta() {
+            const container = document.getElementById('content-modo-festa');
+            container.innerHTML = `
+                <div class="bg-white rounded-lg shadow-sm p-6">
+                    <h2 class="text-lg font-bold text-emerald-600 mb-3">🎉 Modo Festa</h2>
+                    <p class="text-sm text-gray-600 mb-4">Planeje um jantar especial! Informe o número de convidados e a IA criará um menu vegetariano completo para impressionar.</p>
+                    
+                    <div class="mb-4">
+                        <label for="party-people-input" class="block text-sm font-medium text-gray-700">Número de Convidados</label>
+                        <input type="number" id="party-people-input" value="4" min="1" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+
+                    <div class="mb-4">
+                         <label for="party-instructions-input" class="block text-sm font-medium text-gray-700">Instruções Especiais (Opcional)</label>
+                         <textarea id="party-instructions-input" class="mt-1 w-full h-20 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-400" placeholder="Ex: um prato principal sem glúten, uma sobremesa sem lactose..."></textarea>
+                    </div>
+
+                    <button class="gemini-button w-full mt-4 py-2 px-4 rounded-lg" onclick="handlePartyModeClick()">
+                        🎉 Gerar Menu de Festa
+                    </button>
+                    <div id="party-mode-result" class="mt-6"></div>
                 </div>
             `;
         }
@@ -435,11 +501,15 @@
             button.classList.add('opacity-50', 'cursor-not-allowed');
 
             try {
-                const newPlan = await callGeminiForPlan(inventory, people, startDate, endDate, specialInstructions);
+                const startDateObj = new Date(startDate + 'T00:00:00');
+                const endDateObj = new Date(endDate + 'T00:00:00');
+                const diffTime = Math.abs(endDateObj - startDateObj);
+                const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+                const newPlan = await callGeminiForPlan(inventory, people, totalDays, specialInstructions);
                 
                 mealPlanData.estoqueInicial = inventory;
                 
-                const startDateObj = new Date(startDate + 'T00:00:00');
                 const diasDaSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
 
                 if (newPlan.cardapio && newPlan.cardapio.length > 0) {
@@ -459,6 +529,8 @@
                 mealPlanData.cardapio = newPlan.cardapio;
                 mealPlanData.lista = newPlan.lista;
                 mealPlanData.receitas = newPlan.receitas;
+                cardapioCurrentPage = 1; // Reset pagination
+                generatedWorldRecipes = []; // Reset world recipes
                 
                 renderAll();
                 feedbackDiv.innerHTML = `<p class="text-green-600 text-sm font-semibold">Seu novo plano foi gerado com sucesso!</p>`;
@@ -472,11 +544,11 @@
             }
         }
 
-        async function callGeminiForPlan(inventory, people, startDate, endDate, specialInstructions) {
+        async function callGeminiForPlan(inventory, people, totalDays, specialInstructions) {
             const instructionsText = specialInstructions.trim() !== '' ? `Instruções Especiais a seguir: ${specialInstructions}` : '';
             const inventoryText = inventory.trim() !== '' ? `Estoque disponível:\n${inventory}` : 'O usuário não forneceu um estoque. Crie um cardápio vegetariano aleatório, variado e equilibrado.';
 
-            const prompt = `Você é a NutriVeg IA, uma nutricionista virtual especialista em criar planos alimentares vegetarianos. Baseado na seguinte lista de ingredientes de estoque (incluindo quantidades), crie um plano alimentar completo para 7 dias para ${people} adultos, para o período de ${startDate} a ${endDate}. O plano deve maximizar o uso do estoque. ${instructionsText} A resposta DEVE ser um objeto JSON, sem nenhum texto ou formatação extra. O JSON deve ter a seguinte estrutura: { "cardapio": [{ "dia": "String (apenas o nome do dia da semana, ex: 'Segunda-feira')", "cafe": "String", "almoco": "String", "jantar": "String", "lanches": "String" }], "lista": { "Categoria": ["item1", "item2"] }, "receitas": [{ "titulo": "String", "ingredientes": ["String"], "preparo": ["String"] }] }. Gere uma receita detalhada, mesmo que simples, para CADA refeição do cardápio (café, almoço, jantar e lanches). O título da receita deve corresponder exatamente ao nome da refeição no cardápio para facilitar a busca. A 'lista' (lista de compras) deve conter APENAS os itens necessários para completar as receitas que NÃO estão na lista de 'Estoque disponível'. As receitas devem ser criadas considerando as quantidades do estoque. Por exemplo, se o estoque tem '2 abobrinhas', não crie receitas que usem 3. Não invente receitas, use como base pratos conhecidos.
+            const prompt = `Você é a NutriVeg IA, uma nutricionista virtual especialista em criar planos alimentares vegetarianos. Baseado na seguinte lista de ingredientes de estoque (incluindo quantidades), crie um plano alimentar completo para ${totalDays} dias para ${people} adultos. O plano deve maximizar o uso do estoque. ${instructionsText} A resposta DEVE ser um objeto JSON, sem nenhum texto ou formatação extra. O JSON deve ter a seguinte estrutura: { "cardapio": [{ "dia": "String (apenas o nome do dia da semana, ex: 'Segunda-feira')", "cafe": "String", "almoco": "String", "jantar": "String", "lanches": "String" }], "lista": { "Categoria": ["item1", "item2"] }, "receitas": [{ "titulo": "String", "ingredientes": ["String"], "preparo": ["String"] }] }. Gere uma receita detalhada, mesmo que simples, para CADA refeição do cardápio (café, almoço, jantar e lanches). O título da receita deve corresponder exatamente ao nome da refeição no cardápio para facilitar a busca. A 'lista' (lista de compras) deve conter APENAS os itens necessários para completar as receitas que NÃO estão na lista de 'Estoque disponível'. As receitas devem ser criadas considerando as quantidades do estoque. Por exemplo, se o estoque tem '2 abobrinhas', não crie receitas que usem 3. Não invente receitas, use como base pratos conhecidos.
 
 ${inventoryText}`;
 
@@ -590,11 +662,11 @@ ${inventoryText}`;
             openGeminiModal(title, prompt);
         }
 
-        window.handleAnalysisClick = async function() {
-            const resultDiv = document.getElementById('analise-result');
+        window.handleNutriAnalysisClick = async function() {
+            const resultDiv = document.getElementById('nutri-result');
             resultDiv.innerHTML = '<div class="flex justify-center items-center h-full"><div class="spinner"></div><p class="ml-4 text-gray-500">✨ Analisando...</p></div>';
             const menuText = JSON.stringify(mealPlanData.cardapio);
-            const prompt = `Você é a NutriVeg IA. Faça uma análise nutricional geral, em tópicos, do seguinte cardápio semanal vegetariano. Destaque os pontos fortes (ex: variedade de fibras, fontes de proteína) e possíveis pontos de atenção (ex: garantir fontes de cálcio, ferro, etc.). Não precisa ser excessivamente técnico. Cardápio: ${menuText}`;
+            const prompt = `Você é a NutriVeg IA, especialista em nutrição e planejamento. Para o cardápio semanal a seguir, forneça duas seções claras em formato de tópicos: 1. **Justificativa Nutricional:** Explique por que este cardápio é balanceado, mencionando a combinação de macronutrientes, variedade de vitaminas e minerais. 2. **Plano de Ação para Marmitas:** Crie um guia passo a passo para preparar a maioria das refeições da semana em um único dia. Dê dicas de como cozinhar os grãos, preparar os vegetais, cozinhar as proteínas e montar as marmitas para manter o frescor. Cardápio: ${menuText}`;
             try {
                 const resultText = await callGeminiForText(prompt);
                 resultDiv.innerHTML = resultText.replace(/\n/g, '<br>');
@@ -644,7 +716,10 @@ ${inventoryText}`;
         window.handleWorldCultureClick = async function() {
             const resultDiv = document.getElementById('world-culture-result');
             resultDiv.innerHTML = '<div class="flex justify-center items-center h-full"><div class="spinner"></div><p class="ml-4 text-gray-500">✨ Viajando pelo mundo...</p></div>';
-            const prompt = `Você é a NutriVeg IA. Forneça 3 receitas de pratos vegetarianos ou veganos, de 3 países diferentes. Use apenas receitas conhecidas e tradicionais. Formate a resposta como um objeto JSON com uma chave "receitas", que é um array de objetos, cada um com "titulo", "pais", "ingredientes" (array de strings) e "preparo" (array de strings). Não invente receitas.`;
+            const exclusionList = generatedWorldRecipes.join(', ');
+            const exclusionPrompt = exclusionList ? `Não inclua estas receitas que já foram mostradas: ${exclusionList}.` : '';
+
+            const prompt = `Você é a NutriVeg IA. Forneça 3 receitas de pratos vegetarianos ou veganos, de 3 países diferentes. Use apenas receitas conhecidas e tradicionais. ${exclusionPrompt} Formate a resposta como um objeto JSON com uma chave "receitas", que é um array de objetos, cada um com "titulo", "pais", "ingredientes" (array de strings) e "preparo" (array de strings). Não invente receitas.`;
             
             try {
                 const resultText = await callGeminiForText(prompt);
@@ -653,6 +728,8 @@ ${inventoryText}`;
                 const jsonString = resultText.substring(jsonStart, jsonEnd + 1);
                 const recipes = JSON.parse(jsonString).receitas;
                 
+                recipes.forEach(r => generatedWorldRecipes.push(r.titulo));
+
                 resultDiv.innerHTML = recipes.map(receita => `
                     <div class="border-t pt-4 mt-4">
                         <h3 class="font-semibold text-gray-800 mb-2">✈️ ${receita.titulo} (${receita.pais})</h3>
@@ -668,6 +745,86 @@ ${inventoryText}`;
                         </div>
                     </div>
                 `).join('');
+
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="text-red-500">${error.message}</p>`;
+            }
+        }
+
+        window.handlePartyModeClick = async function() {
+            const people = document.getElementById('party-people-input').value;
+            const instructions = document.getElementById('party-instructions-input').value;
+            const resultDiv = document.getElementById('party-mode-result');
+
+            if (!people || people < 1) {
+                resultDiv.innerHTML = `<p class="text-red-500 text-sm">Por favor, insira um número válido de convidados.</p>`;
+                return;
+            }
+
+            resultDiv.innerHTML = '<div class="flex justify-center items-center h-full"><div class="spinner"></div><p class="ml-4 text-gray-500">✨ Criando um menu especial...</p></div>';
+            
+            const instructionsText = instructions.trim() !== '' ? `Leve em conta as seguintes instruções especiais: ${instructions}.` : '';
+
+            const prompt = `Você é a NutriVeg IA, uma chef especialista em menus vegetarianos para eventos. Crie um menu de festa completo para ${people} pessoas. ${instructionsText} O menu deve conter: 1 entrada, 1 prato principal, 1 sobremesa e 1 bebida. Use apenas receitas conhecidas e que impressionem os convidados. Forneça também dicas de apresentação e um plano de timing para o preparo. A resposta DEVE ser um objeto JSON, sem nenhum texto ou formatação extra, com a seguinte estrutura: 
+            { 
+              "menu": {
+                "Entrada": { "titulo": "String", "ingredientes": ["String"], "preparo": ["String"] },
+                "Prato Principal": { "titulo": "String", "ingredientes": ["String"], "preparo": ["String"] },
+                "Sobremesa": { "titulo": "String", "ingredientes": ["String"], "preparo": ["String"] },
+                "Bebida": { "titulo": "String", "ingredientes": ["String"], "preparo": ["String"] }
+              },
+              "dicas": {
+                "apresentacao": "String com dicas de como servir e decorar os pratos.",
+                "timing": "String com um plano de quando preparar cada item (ex: 'Véspera', 'Manhã do evento', 'Pouco antes de servir')."
+              }
+            }`;
+            
+            try {
+                const resultText = await callGeminiForText(prompt);
+                const jsonStart = resultText.indexOf('{');
+                const jsonEnd = resultText.lastIndexOf('}');
+                const jsonString = resultText.substring(jsonStart, jsonEnd + 1);
+                const partyPlan = JSON.parse(jsonString);
+                
+                let resultHTML = '';
+
+                // Render Menu
+                for (const [category, recipe] of Object.entries(partyPlan.menu)) {
+                    resultHTML += `
+                        <div class="border-t pt-4 mt-4">
+                            <h3 class="font-semibold text-gray-800 mb-2">${category}: ${recipe.titulo}</h3>
+                            <div class="text-sm text-gray-700 space-y-3">
+                                <div>
+                                    <h4 class="font-medium mb-1">Ingredientes:</h4>
+                                    <ul class="list-disc list-inside space-y-1">${recipe.ingredientes.map(ing => `<li>${ing}</li>`).join('')}</ul>
+                                </div>
+                                <div>
+                                    <h4 class="font-medium mb-1">Modo de Preparo:</h4>
+                                    <ol class="list-decimal list-inside space-y-1">${recipe.preparo.map(passo => `<li>${passo}</li>`).join('')}</ol>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Render Dicas
+                resultHTML += `
+                    <div class="border-t pt-4 mt-4 bg-emerald-50 p-4 rounded-lg">
+                        <h3 class="font-semibold text-emerald-800 mb-2">⭐ Dicas da Chef</h3>
+                        <div class="text-sm text-emerald-700 space-y-3">
+                            <div>
+                                <h4 class="font-medium mb-1">Apresentação:</h4>
+                                <p>${partyPlan.dicas.apresentacao}</p>
+                            </div>
+                            <div>
+                                <h4 class="font-medium mb-1">Timing de Preparo:</h4>
+                                <p>${partyPlan.dicas.timing}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                resultDiv.innerHTML = resultHTML;
 
             } catch (error) {
                 resultDiv.innerHTML = `<p class="text-red-500">${error.message}</p>`;
@@ -722,7 +879,7 @@ ${inventoryText}`;
 
         // --- TAB & MODAL LOGIC ---
         window.showTab = function(tabName) {
-            const contents = ['cardapio', 'lista', 'receitas', 'gerar', 'analise', 'receita-rapida', 'cultura-mundial'];
+            const contents = ['cardapio', 'lista', 'receitas', 'gerar', 'nutri', 'receita-rapida', 'cultura-mundial', 'modo-festa'];
             contents.forEach(content => {
                 document.getElementById(`content-${content}`).classList.toggle('hidden', content !== tabName);
                 document.getElementById(`tab-${content}`).classList.toggle('tab-active', content === tabName);
